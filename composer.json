@@ -1,0 +1,29 @@
+{
+    "name": "seu-vendor/banco-do-brasil",
+    "description": "Integração com a API de Cobrança do Banco do Brasil",
+    "type": "library",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "SeuVendor\\BancoDoBrasil\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Seu Nome",
+            "email": "seu-email@exemplo.com"
+        }
+    ],
+    "require": {
+        "php": "^7.4|^8.0",
+        "guzzlehttp/guzzle": "^7.0",
+        "illuminate/support": "^8.0|^9.0|^10.0",
+        "illuminate/redis": "^8.0|^9.0|^10.0",
+        "illuminate/filesystem": "^8.0|^9.0|^10.0",
+        "nesbot/carbon": "^2.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.0"
+    },
+    "minimum-stability": "stable"
+}
