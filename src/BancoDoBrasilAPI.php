@@ -308,14 +308,16 @@ class BancoDoBrasilAPI
         // Primeiro, tenta recuperar o token do cache
         if ($this->cacheMethod === 'redis') {
             // Utiliza comandos diretos no Redis
-            $cachedTokenJson = Redis::get('bb_api_access_token');
+            $cachedTokenJson = Redis::get('bb_api_access_token_' . $this->environment);
             if ($cachedTokenJson) {
                 $cachedToken = json_decode($cachedTokenJson, true);
                 if ($cachedToken && isset($cachedToken['access_token']) && isset($cachedToken['expires_at'])) {
                     // Verifica se o token ainda é válido usando Carbon
                     $now = Carbon::now();
                     $expiresAt = Carbon::createFromTimestamp($cachedToken['expires_at']);
-                    if ($expiresAt->gt($now)) {
+
+                    // Adiciona uma margem de segurança de 5 minutos para expiração
+                    if ($expiresAt->subMinutes(5)->gt($now)) {
                         $this->access_token = $cachedToken['access_token'];
                         $this->expires_in = $expiresAt->diffInSeconds($now);
                         return;
@@ -324,14 +326,17 @@ class BancoDoBrasilAPI
             }
         } elseif ($this->cacheMethod === 'file') {
             // Utiliza um arquivo no disco 'public' do Laravel
-            if (Storage::disk('public')->exists('bb_api_access_token.json')) {
-                $tokenData = Storage::disk('public')->get('bb_api_access_token.json');
+            $cacheFilename = 'bb_api_access_token_' . $this->environment . '.json';
+            if (Storage::disk('public')->exists($cacheFilename)) {
+                $tokenData = Storage::disk('public')->get($cacheFilename);
                 $cachedToken = json_decode($tokenData, true);
                 if ($cachedToken && isset($cachedToken['access_token']) && isset($cachedToken['expires_at'])) {
                     // Verifica se o token ainda é válido usando Carbon
                     $now = Carbon::now();
                     $expiresAt = Carbon::createFromTimestamp($cachedToken['expires_at']);
-                    if ($expiresAt->gt($now)) {
+
+                    // Adiciona uma margem de segurança de 5 minutos para expiração
+                    if ($expiresAt->subMinutes(5)->gt($now)) {
                         $this->access_token = $cachedToken['access_token'];
                         $this->expires_in = $expiresAt->diffInSeconds($now);
                         return;
@@ -378,11 +383,11 @@ class BancoDoBrasilAPI
 
             if ($this->cacheMethod === 'redis') {
                 // Armazena no Redis com tempo de expiração
-                Redis::setex('bb_api_access_token', $this->expires_in, json_encode($cachedToken));
+                Redis::setex('bb_api_access_token_' . $this->environment, $this->expires_in, json_encode($cachedToken));
             } elseif ($this->cacheMethod === 'file') {
                 // Armazena no arquivo no disco 'public', criando o arquivo se não existir
                 $tokenData = json_encode($cachedToken);
-                Storage::disk('public')->put('bb_api_access_token.json', $tokenData);
+                Storage::disk('public')->put('bb_api_access_token_' . $this->environment . '.json', $tokenData);
             }
         } catch (RequestException $e) {
             $response_body = $e->hasResponse() ? (string)$e->getResponse()->getBody() : '';
@@ -406,6 +411,7 @@ class BancoDoBrasilAPI
      */
     private function sendRequest(string $method, string $endpoint, array $query_params = [], array $body = []): object
     {
+        // Garante que temos um token de acesso válido
         $this->authenticate();
         $url = $this->base_api_url . $endpoint;
 
@@ -417,11 +423,15 @@ class BancoDoBrasilAPI
         $options = [
             'headers' => $headers,
             'query' => $query_params,
+            'http_errors' => true, // Mantém habilitado para capturarmos exceções
         ];
 
         if (!empty($body)) {
             $options['json'] = $body;
         }
+
+        // Log da requisição para debugging se necessário
+        $this->logRequest($method, $url, $options);
 
         try {
             $response = $this->http_client->request($method, $url, $options);
@@ -429,54 +439,186 @@ class BancoDoBrasilAPI
             // Decodifica a resposta JSON como objeto
             $response_data = json_decode((string)$response->getBody(), false);
 
+            // Log da resposta para debugging
+            $this->logResponse($response_data);
+
             return $response_data;
         } catch (ConnectException $e) {
             // Captura erro de conexão (connect_timeout)
+            $this->logError('Erro de conexão', $e);
             throw new \Exception('Erro de conexão: Não foi possível se conectar com o Banco do Brasil', 500);
         } catch (RequestException $e) {
+            $this->logError('Erro de requisição', $e);
+
             // Captura outros erros de timeout e requisição
             $handlerContext = $e->getHandlerContext();
             if (isset($handlerContext['errno']) && $handlerContext['errno'] === 28) {
                 // O número de erro 28 indica timeout
                 throw new \Exception('Timeout da requisição: ' . $e->getMessage(), 500);
             }
+
             // Obter o código de status HTTP
-            $statusCode = $e->getResponse() ? $e->getResponse()->getStatusCode() : null;
+            $statusCode = $e->getResponse() ? $e->getResponse()->getStatusCode() : 500;
             $response_body = $e->hasResponse() ? (string)$e->getResponse()->getBody() : null;
+
+            if (!$response_body) {
+                throw new \Exception("Erro na requisição: " . $e->getMessage(), $statusCode);
+            }
+
             $errorData = json_decode($response_body, true);
+
+            // Tratamento aprimorado de erros
             if (isset($errorData['erros']) && is_array($errorData['erros'])) {
-                $errorMessages = [];
-                foreach ($errorData['erros'] as $key => $error) {
-                    if (isset($error['textoMensagem'])) {
-                        $errorMessages[$key]['mensagem'] = $error['textoMensagem'];
-                    } else if (isset($error['mensagem'])) {
-                        $errorMessages[$key]['mensagem'] = $error['mensagem'];
-                    } else {
-                        $errorMessages[$key]['mensagem'] = 'Erro desconhecido';
-                    }
-                    if (isset($error['codigo'])) {
-                        $errorMessages[$key]['codigo'] = $error['codigo'];
-                    }
-                }
-                if ($errorMessages[0]['codigo'] == '4874915') {
+                $errorMessages = $this->formatErrorMessages($errorData['erros'], 'textoMensagem');
+
+                // Caso específico de erro de "Nosso Número" já incluído
+                if (isset($errorMessages[0]['codigo']) && $errorMessages[0]['codigo'] == '4874915') {
                     throw new \Exception(json_encode($errorMessages[0]), $statusCode);
                 }
-                throw new \Exception("Erro :{$errorMessages[0]['mensagem']}", $statusCode);
+
+                throw new \Exception("Erro: " . $errorMessages[0]['mensagem'], $statusCode);
             } elseif (isset($errorData['errors']) && is_array($errorData['errors'])) {
-                $errorMessages = [];
-                foreach ($errorData['errors'] as $error) {
-                    $errorMessages[] = $error['message'] ?? 'Erro desconhecido';
-                }
-                $errorMessage = implode('; ', $errorMessages);
+                $errorMessages = $this->formatErrorMessages($errorData['errors'], 'message');
+                $errorMessage = implode('; ', array_column($errorMessages, 'mensagem'));
                 throw new \Exception("Erro {$statusCode}: {$errorMessage}", $statusCode);
             } elseif (isset($errorData['message'])) {
-                $errorMessage = $errorData['message'];
-                throw new \Exception("Erro: {$errorMessage}", $statusCode);
+                throw new \Exception("Erro: {$errorData['message']}", $statusCode);
             } else {
-                $errorMessage = $e->getMessage();
-                throw new \Exception("Erro na requisição: {$errorMessage}", $statusCode);
+                throw new \Exception("Erro na requisição: {$e->getMessage()}", $statusCode);
             }
+        } catch (\Exception $e) {
+            $this->logError('Erro geral', $e);
+            throw $e;
         }
+    }
+
+    /**
+     * Formata as mensagens de erro para um formato padronizado
+     * 
+     * @param array $errors Array com os erros retornados pela API
+     * @param string $messageKey Chave onde está a mensagem de erro
+     * @return array
+     */
+    private function formatErrorMessages(array $errors, string $messageKey): array
+    {
+        $formattedErrors = [];
+
+        foreach ($errors as $key => $error) {
+            $formattedError = ['mensagem' => 'Erro desconhecido'];
+
+            if (isset($error[$messageKey])) {
+                $formattedError['mensagem'] = $error[$messageKey];
+            } elseif (isset($error['mensagem'])) {
+                $formattedError['mensagem'] = $error['mensagem'];
+            }
+
+            if (isset($error['codigo'])) {
+                $formattedError['codigo'] = $error['codigo'];
+            }
+
+            $formattedErrors[$key] = $formattedError;
+        }
+
+        return $formattedErrors;
+    }
+
+    /**
+     * Registra informações da requisição para debug
+     * 
+     * @param string $method
+     * @param string $url
+     * @param array $options
+     * @return void
+     */
+    private function logRequest(string $method, string $url, array $options): void
+    {
+        if (env('BB_API_DEBUG', false)) {
+            // Copia as opções para não modificar o original
+            $logOptions = $options;
+
+            // Remove ou mascara informações sensíveis
+            if (isset($logOptions['headers']['Authorization'])) {
+                $logOptions['headers']['Authorization'] = 'Bearer [REDACTED]';
+            }
+
+            $logData = [
+                'timestamp' => Carbon::now()->toIso8601String(),
+                'method' => $method,
+                'url' => $url,
+                'options' => $logOptions
+            ];
+
+            // Salva o log
+            $this->saveLog('request', $logData);
+        }
+    }
+
+    /**
+     * Registra informações da resposta para debug
+     * 
+     * @param object $response
+     * @return void
+     */
+    private function logResponse($response): void
+    {
+        if (env('BB_API_DEBUG', false)) {
+            $logData = [
+                'timestamp' => Carbon::now()->toIso8601String(),
+                'response' => json_decode(json_encode($response), true) // Converte para array
+            ];
+
+            // Salva o log
+            $this->saveLog('response', $logData);
+        }
+    }
+
+    /**
+     * Registra informações de erro para debug
+     * 
+     * @param string $type
+     * @param \Exception $exception
+     * @return void
+     */
+    private function logError(string $type, \Exception $exception): void
+    {
+        if (env('BB_API_DEBUG', false)) {
+            $logData = [
+                'timestamp' => Carbon::now()->toIso8601String(),
+                'type' => $type,
+                'message' => $exception->getMessage(),
+                'file' => $exception->getFile(),
+                'line' => $exception->getLine()
+            ];
+
+            if ($exception instanceof RequestException && $exception->hasResponse()) {
+                $logData['response'] = (string)$exception->getResponse()->getBody();
+            }
+
+            // Salva o log
+            $this->saveLog('error', $logData);
+        }
+    }
+
+    /**
+     * Salva o log em arquivo
+     * 
+     * @param string $type
+     * @param array $data
+     * @return void
+     */
+    private function saveLog(string $type, array $data): void
+    {
+        $date = Carbon::now()->format('Y-m-d');
+        $logDir = storage_path('logs/bb_api');
+
+        if (!is_dir($logDir)) {
+            mkdir($logDir, 0755, true);
+        }
+
+        $logFile = "{$logDir}/{$date}_{$type}.log";
+        $logEntry = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . "\n\n";
+
+        file_put_contents($logFile, $logEntry, FILE_APPEND);
     }
 
     /**
@@ -561,43 +703,105 @@ class BancoDoBrasilAPI
     public function criarBoleto(array $boleto_data): object
     {
         $bancoBrasil = Helpers::getConvenioSettings('banco_brasil');
+
+        // Validações dos dados obrigatórios
+        $camposObrigatorios = [
+            'valorOriginal',
+            'dataVencimento',
+            'pagador'
+        ];
+
+        foreach ($camposObrigatorios as $campo) {
+            if (!isset($boleto_data[$campo])) {
+                throw new \Exception("Campo obrigatório '{$campo}' não informado");
+            }
+        }
+
+        // Validações de pagador
+        if (isset($boleto_data['pagador'])) {
+            $camposPagador = [
+                'tipoInscricao',
+                'numeroInscricao',
+                'nome',
+                'endereco',
+                'cep',
+                'cidade',
+                'bairro',
+                'uf'
+            ];
+
+            foreach ($camposPagador as $campo) {
+                if (!isset($boleto_data['pagador'][$campo])) {
+                    throw new \Exception("Campo obrigatório 'pagador.{$campo}' não informado");
+                }
+            }
+        }
+
+        // Dados padrão com base nas configurações
         $default_data = [
             "numeroConvenio" => $bancoBrasil['convenio'],
             "numeroCarteira" => $bancoBrasil['numero_carteira'],
             "numeroVariacaoCarteira" => $bancoBrasil['numero_variacao_carteira'],
             "codigoModalidade" => 1,
+            "dataEmissao" => Carbon::now()->format('d.m.Y'),
             "indicadorAceiteTituloVencido" => "N",
             "codigoAceite" => "A",
             "codigoTipoTitulo" => 2,
             "descricaoTipoTitulo" => "DM",
             "indicadorPermissaoRecebimentoParcial" => "N",
-            "numeroTituloBeneficiario" => "0DABC-DSD-1", //TODO: Trocar por valor correto
+            "numeroTituloBeneficiario" => Str::random(10), // Identificador único
             "indicadorPix" => $bancoBrasil['pagamento_pix'] ? "S" : "N"
         ];
+
+        // Formatação de valores específicos
+        if (isset($boleto_data['valorOriginal'])) {
+            // Garante que o formato está correto, com 2 casas decimais e separador de decimal como ponto
+            $boleto_data['valorOriginal'] = number_format((float)$boleto_data['valorOriginal'], 2, '.', '');
+        }
+
+        if (isset($boleto_data['dataVencimento'])) {
+            // Converte para o formato esperado pela API (dd.mm.yyyy)
+            $data = Carbon::parse($boleto_data['dataVencimento']);
+            $boleto_data['dataVencimento'] = $data->format('d.m.Y');
+        }
 
         $tentativas = 1;
         $success = false;
         $resposta = null;
+        $ultimoErro = null;
 
         while ($tentativas <= 3 && !$success) {
             try {
+                // Gera um número único para cada tentativa
                 $default_data['numeroTituloCliente'] = Helpers::generateNumeroTituloCliente($this->numeroConvenio);
 
                 $resposta = $this->sendRequest('POST', 'boletos', [], array_merge($default_data, $boleto_data));
                 $success = true;
             } catch (\Exception $e) {
-                if (!Str::isJson($e->getMessage())) {
+                $ultimoErro = $e;
+
+                // Verifica se é o erro específico de "Nosso Número" já incluído
+                if (Str::isJson($e->getMessage())) {
+                    $errorJson = json_decode($e->getMessage());
+                    if (isset($errorJson->codigo) && $errorJson->codigo === "4874915") {
+                        // Se for o erro específico, tentamos novamente com outro número
+                        if ($tentativas === 3) {
+                            throw new \Exception($errorJson->mensagem ?? 'Nosso Número já incluído anteriormente.');
+                        }
+                    } else {
+                        // Se for outro tipo de erro JSON, lançamos imediatamente
+                        throw $e;
+                    }
+                } else {
+                    // Se não for erro JSON, lançamos imediatamente
                     throw $e;
-                }
-                $errorJson = json_decode($e->getMessage());
-                if (!isset($errorJson->codigo) || $errorJson->codigo !== "4874915") {
-                    throw $e;
-                }
-                if ($tentativas === 3) {
-                    throw new \Exception($errorJson->mensagem ?? 'Nosso Número já incluído anteriormente.');
                 }
             }
             $tentativas++;
+        }
+
+        if (!$success && $ultimoErro) {
+            throw $ultimoErro;
         }
 
         return $resposta;
@@ -708,5 +912,96 @@ class BancoDoBrasilAPI
     public function getBaseApiUrl(): string
     {
         return $this->base_api_url;
+    }
+
+    /**
+     * Obtém a imagem de um boleto em formato PDF.
+     *
+     * @param string $id ID do boleto.
+     * @return array Resposta contendo os dados do PDF e informações adicionais.
+     * @throws \Exception
+     */
+    public function obterPdfBoleto(string $id): array
+    {
+        if (empty($this->getNumeroConvenio())) {
+            throw new \Exception("O parâmetro 'numeroConvenio' é obrigatório.");
+        }
+
+        $queryParams = [
+            'numeroConvenio' => $this->getNumeroConvenio(),
+            'formato' => 'pdf'
+        ];
+
+        try {
+            // Autenticação e preparação da requisição
+            $this->authenticate();
+            $url = $this->base_api_url . 'boletos/' . $id;
+
+            // Adiciona a chave de aplicação aos parâmetros de consulta
+            $queryParams[$this->app_key] = $this->gw_app_key;
+
+            $headers = $this->getAuthHeaders();
+
+            $options = [
+                'headers' => $headers,
+                'query' => $queryParams,
+            ];
+
+            // Requisição direta para obter o PDF
+            $response = $this->http_client->request('GET', $url, $options);
+
+            // Verificar o Content-Type da resposta
+            $contentType = $response->getHeader('Content-Type');
+            $contentType = !empty($contentType) ? $contentType[0] : '';
+
+            if (strpos($contentType, 'application/pdf') !== false) {
+                // É um PDF, retorna os dados binários
+                return [
+                    'success' => true,
+                    'content_type' => $contentType,
+                    'data' => (string)$response->getBody(),
+                    'filename' => "boleto_{$id}.pdf"
+                ];
+            } else if (strpos($contentType, 'application/json') !== false) {
+                // É um JSON, provavelmente um erro
+                $response_data = json_decode((string)$response->getBody(), true);
+                return [
+                    'success' => false,
+                    'content_type' => $contentType,
+                    'error' => $response_data['erros'][0]['textoMensagem'] ?? 'Erro ao obter o PDF do boleto',
+                    'data' => $response_data
+                ];
+            } else {
+                // Outro tipo de conteúdo
+                return [
+                    'success' => false,
+                    'content_type' => $contentType,
+                    'error' => 'Tipo de conteúdo não esperado',
+                    'data' => (string)$response->getBody()
+                ];
+            }
+        } catch (\Exception $e) {
+            throw new \Exception("Erro ao obter PDF do boleto: " . $e->getMessage(), $e->getCode());
+        }
+    }
+
+    /**
+     * Obtém informações do status de pagamento de um boleto.
+     *
+     * @param string $id ID do boleto.
+     * @return object Resposta da API.
+     * @throws \Exception
+     */
+    public function consultarStatusPagamento(string $id): object
+    {
+        if (empty($this->getNumeroConvenio())) {
+            throw new \Exception("O parâmetro 'numeroConvenio' é obrigatório.");
+        }
+
+        $queryParams = [
+            'numeroConvenio' => $this->getNumeroConvenio()
+        ];
+
+        return $this->sendRequest('GET', 'boletos/' . $id . '/pagamento', $queryParams);
     }
 }

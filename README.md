@@ -1,12 +1,24 @@
 # Integração com API de Cobrança do Banco do Brasil
 
-Este pacote fornece uma integração fácil com a API de Cobrança do Banco do Brasil (BB).
+Este pacote fornece uma integração simplificada com a API de Cobrança do Banco do Brasil, permitindo a criação, consulta, alteração e baixa de boletos registrados.
 
 ## Instalação
 
+Você pode instalar o pacote via composer:
+
 ```bash
-composer require seu-vendor/banco-do-brasil
+composer require seuvendor/banco-do-brasil
 ```
+
+## Configuração
+
+Publique o arquivo de configuração:
+
+```bash
+php artisan vendor:publish --provider="SeuVendor\BancoDoBrasil\BancoDoBrasilServiceProvider"
+```
+
+Adicione as seguintes variáveis ao seu .env:
 
 ## Uso Básico
 
@@ -41,10 +53,6 @@ $boleto = $bbApi->obterBoleto('00031285570000000205');
 // Baixar/cancelar boleto
 $bbApi->baixarBoleto('00031285570000000205');
 ```
-
-## Configuração
-
-Configure as seguintes variáveis de ambiente: 
 
 ## Licença
 
