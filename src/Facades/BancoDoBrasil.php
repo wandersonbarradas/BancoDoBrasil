@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static array criarBoleto(array $dados)
  * @method static array listarBoletos(array $filtros)
  * @method static array obterBoleto(string $id)
- * @method static array obterPdfBoleto(string $id)
+ * @method static array gerarPdfBoleto(string $id)
  * @method static array baixarBoleto(string $id)
  * @method static array alterarBoleto(string $id, array $dados)
  * @method static array consultarPagamento(string $id)

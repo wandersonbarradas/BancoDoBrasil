@@ -237,11 +237,22 @@ class BoletoService
         // Validação dos dados do boleto
         $this->validator->validarDadosBoleto($dados);
 
+        // Validação dos dados de configuração
+        if (empty($this->config['agencia'])) {
+            throw new BBValidationException("Agência não configurada. Defina a agência no arquivo de configuração.");
+        }
+
+        if (empty($this->config['conta'])) {
+            throw new BBValidationException("Conta não configurada. Defina a conta no arquivo de configuração.");
+        }
+
         // Dados padrão do boleto
         $dadosPadrao = [
             "numeroConvenio" => $this->config['convenio'],
             "numeroCarteira" => $this->config['carteira'],
             "numeroVariacaoCarteira" => $this->config['variacao_carteira'],
+            "agenciaBeneficiario" => $this->config['agencia'],
+            "contaBeneficiario" => $this->config['conta'],
             "codigoModalidade" => 1,
             "dataEmissao" => Carbon::now()->format('d.m.Y'),
             "indicadorAceiteTituloVencido" => "N",
@@ -292,26 +303,32 @@ class BoletoService
     /**
      * Lista boletos registrados.
      *
-     * @param array $filtros
+     * @param array $filtros Filtros adicionais opcionais
      * @return array
      * @throws BBValidationException|BBApiException
      */
-    public function listarBoletos(array $filtros): array
+    public function listarBoletos(array $filtros = []): array
     {
-        // Validação dos filtros obrigatórios
-        if (!isset($filtros['indicadorSituacao'])) {
-            throw new BBValidationException("O parâmetro 'indicadorSituacao' é obrigatório.");
+        // Parâmetros obrigatórios da configuração
+        $parametrosObrigatorios = [
+            'indicadorSituacao' => $filtros['indicadorSituacao'] ?? 'A', // A=Aberto, B=Baixado, T=Todos
+            'agenciaBeneficiario' => $this->config['agencia'],
+            'contaBeneficiario' => $this->config['conta'],
+        ];
+
+        // Mescla os filtros fornecidos com os parâmetros obrigatórios (os filtros têm precedência)
+        $filtrosCompletos = array_merge($parametrosObrigatorios, $filtros);
+
+        // Validação dos parâmetros
+        if (empty($this->config['agencia'])) {
+            throw new BBValidationException("Agência não configurada. Defina a agência no arquivo de configuração.");
         }
 
-        if (!isset($filtros['agenciaBeneficiario'])) {
-            throw new BBValidationException("O parâmetro 'agenciaBeneficiario' é obrigatório.");
+        if (empty($this->config['conta'])) {
+            throw new BBValidationException("Conta não configurada. Defina a conta no arquivo de configuração.");
         }
 
-        if (!isset($filtros['contaBeneficiario'])) {
-            throw new BBValidationException("O parâmetro 'contaBeneficiario' é obrigatório.");
-        }
-
-        return $this->sendRequest('GET', 'boletos', $filtros);
+        return $this->sendRequest('GET', 'boletos', $filtrosCompletos);
     }
 
     /**
@@ -410,7 +427,7 @@ class BoletoService
             // Passo 1: Obter dados do boleto na API do BB
             $dadosBoleto = $this->obterBoleto($id);
 
-            if (!isset($dadosBoleto['valorOriginal']) || !isset($dadosBoleto['linhaDigitavel'])) {
+            if (!isset($dadosBoleto['valorOriginalTituloCobranca']) || !isset($dadosBoleto['codigoLinhaDigitavel'])) {
                 throw new BBValidationException("Dados insuficientes para geração do boleto PDF");
             }
 
@@ -434,35 +451,35 @@ class BoletoService
             ]);
 
             // Converte a data no formato DD.MM.YYYY para um objeto Carbon
-            $dataVencimento = Carbon::createFromFormat('d.m.Y', $dadosBoleto['dataVencimento']);
-
+            $dataVencimento = Carbon::createFromFormat('d.m.Y', $dadosBoleto['dataVencimentoTituloCobranca']);
+            $dataDocumento = Carbon::createFromFormat('d.m.Y', $dadosBoleto['dataEmissaoTituloCobranca']);
             // Configura o boleto do Banco do Brasil
             $boleto = new \Eduardokum\LaravelBoleto\Boleto\Banco\Bb([
                 'logo'                   => $this->config['boleto_pdf']['logo_path'] ?? null,
-                'dataVencimento'         => $dataVencimento,
-                'valor'                  => $dadosBoleto['valorOriginal'],
-                'numeroDocumento'        => $dadosBoleto['numeroTituloCliente'] ?? '',
-                'nossoNumero'            => $dadosBoleto['numeroTituloCliente'] ?? '',
-                'carteira'               => $dadosBoleto['numeroCarteira'] ?? $this->config['carteira'],
-                'convenio'               => $dadosBoleto['numeroConvenio'] ?? $this->config['convenio'],
                 'agencia'                => $dadosBoleto['agenciaBeneficiario'] ?? '',
                 'conta'                  => $dadosBoleto['contaBeneficiario'] ?? '',
+                'carteira'               => $dadosBoleto['numeroCarteiraCobranca'] ?? $this->config['carteira'],
+                'variacaoCarteira'       => $dadosBoleto['numeroVariacaoCarteiraCobranca'] ?? $this->config['variacao_carteira'],
+                'convenio'               => $this->config['convenio'],
+                'dataVencimento'         => $dataVencimento,
+                'dataDocumento'          => $dataDocumento,
+                'valor'                  => $dadosBoleto['valorAtualTituloCobranca'],
+                'numeroDocumento'        => $id,
+                'numero'                 => substr($id, -10),
                 'multa'                  => $this->config['boleto_pdf']['multa'] ?? 0,
                 'juros'                  => $this->config['boleto_pdf']['juros'] ?? 0,
                 'jurosApos'              => $this->config['boleto_pdf']['juros_apos'] ?? 0,
                 'diasProtesto'           => $this->config['boleto_pdf']['dias_protesto'] ?? 0,
-                'aceite'                 => $dadosBoleto['codigoAceite'] ?? 'N',
-                'especieDoc'             => $dadosBoleto['codigoTipoTitulo'] ?? 'DM',
+                'aceite'                 => $dadosBoleto['codigoAceiteTituloCobranca'] ?? 'N',
+                'especieDoc'             => $dadosBoleto['codigoTipoTituloCobranca'] ?? '2',
                 'beneficiario'           => $beneficiarioPessoa,
                 'pagador'                => $pagadorPessoa,
-                'linhaDigitavel'         => $dadosBoleto['linhaDigitavel'] ?? '',
-                'codigoBarras'           => $dadosBoleto['codigoBarraNumerico'] ?? '',
-                'descricaoDemonstrativo' => [$dadosBoleto['mensagemBeneficiario'] ?? 'Boleto gerado via API do Banco do Brasil'],
+                'descricaoDemonstrativo' => [''],
                 'instrucoes'             => $this->config['boleto_pdf']['instrucoes_padrao'] ?? ['Pagar até a data do vencimento'],
             ]);
 
             // Passo 3: Gerar o PDF
-            if (isset($dadosBoleto['indicadorPix']) && $dadosBoleto['indicadorPix'] === 'S' && !empty($dadosBoleto['qrCode'])) {
+            if ($this->config['cobranca_pagamento_pix'] && !empty($dadosBoleto['qrCode'])) {
                 // Adicionar QR Code PIX se disponível
                 $boleto->setPixQrCode($dadosBoleto['qrCode']);
             }
