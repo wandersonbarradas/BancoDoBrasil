@@ -1,10 +1,10 @@
 <?php
 
-namespace SeuVendor\BancoDoBrasil;
+namespace WandersonBarradas\BancoDoBrasil;
 
 use Illuminate\Support\ServiceProvider;
-use SeuVendor\BancoDoBrasil\Services\BoletoService;
-use SeuVendor\BancoDoBrasil\Services\AuthService;
+use WandersonBarradas\BancoDoBrasil\Services\BoletoService;
+use WandersonBarradas\BancoDoBrasil\Services\AuthService;
 
 class BancoDoBrasilServiceProvider extends ServiceProvider
 {

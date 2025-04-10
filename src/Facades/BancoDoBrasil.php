@@ -1,6 +1,6 @@
 <?php
 
-namespace SeuVendor\BancoDoBrasil\Facades;
+namespace WandersonBarradas\BancoDoBrasil\Facades;
 
 use Illuminate\Support\Facades\Facade;
 
@@ -26,4 +26,4 @@ class BancoDoBrasil extends Facade
     {
         return 'bb-boleto';
     }
-} 
+}

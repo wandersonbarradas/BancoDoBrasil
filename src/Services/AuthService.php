@@ -1,12 +1,12 @@
 <?php
 
-namespace SeuVendor\BancoDoBrasil\Services;
+namespace WandersonBarradas\BancoDoBrasil\Services;
 
 use Carbon\Carbon;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use Illuminate\Support\Facades\Cache;
-use SeuVendor\BancoDoBrasil\Exceptions\BBAuthException;
+use WandersonBarradas\BancoDoBrasil\Exceptions\BBAuthException;
 
 class AuthService
 {

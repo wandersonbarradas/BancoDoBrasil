@@ -1,8 +1,8 @@
 <?php
 
-use SeuVendor\BancoDoBrasil\Facades\BancoDoBrasil;
-use SeuVendor\BancoDoBrasil\Exceptions\BBApiException;
-use SeuVendor\BancoDoBrasil\Exceptions\BBValidationException;
+use WandersonBarradas\BancoDoBrasil\Facades\BancoDoBrasil;
+use WandersonBarradas\BancoDoBrasil\Exceptions\BBApiException;
+use WandersonBarradas\BancoDoBrasil\Exceptions\BBValidationException;
 
 try {
     // Dados do boleto
@@ -22,35 +22,34 @@ try {
         ],
         'descricaoTituloCliente' => 'Pagamento referente à fatura #12345'
     ];
-    
+
     // Cria o boleto
     $resultado = BancoDoBrasil::criarBoleto($boleto);
-    
+
     // Exibe o resultado
     echo "Boleto criado com sucesso!\n";
     echo "Número do título: " . $resultado['numeroTituloCliente'] . "\n";
     echo "Código de barras: " . $resultado['codigoBarraNumerico'] . "\n";
     echo "Linha digitável: " . $resultado['linhaDigitavel'] . "\n";
-    
+
     // Obtém o PDF do boleto
     $pdf = BancoDoBrasil::obterPdfBoleto($resultado['numero']);
-    
+
     if ($pdf['success']) {
         // Salva o PDF em disco
         file_put_contents('boleto.pdf', $pdf['data']);
         echo "PDF do boleto salvo como 'boleto.pdf'\n";
     }
-    
 } catch (BBValidationException $e) {
     echo "Erro de validação: " . $e->getMessage() . "\n";
 } catch (BBApiException $e) {
     echo "Erro na API do BB: " . $e->getMessage() . "\n";
     echo "Código: " . $e->getCode() . "\n";
-    
+
     if ($e->getErrors()) {
         echo "Detalhes do erro:\n";
         print_r($e->getErrors());
     }
 } catch (Exception $e) {
     echo "Erro desconhecido: " . $e->getMessage() . "\n";
-} 
+}

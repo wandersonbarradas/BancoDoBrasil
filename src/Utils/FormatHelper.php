@@ -1,6 +1,6 @@
 <?php
 
-namespace SeuVendor\BancoDoBrasil\Utils;
+namespace WandersonBarradas\BancoDoBrasil\Utils;
 
 use Carbon\Carbon;
 use Illuminate\Support\Str;

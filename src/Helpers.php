@@ -1,6 +1,6 @@
 <?php
 
-namespace SeuVendor\BancoDoBrasil;
+namespace WandersonBarradas\BancoDoBrasil;
 
 use Illuminate\Support\Str;
 use Carbon\Carbon;

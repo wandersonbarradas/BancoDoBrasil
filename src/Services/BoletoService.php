@@ -1,17 +1,17 @@
 <?php
 
-namespace SeuVendor\BancoDoBrasil\Services;
+namespace WandersonBarradas\BancoDoBrasil\Services;
 
 use Carbon\Carbon;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\RequestException;
 use Illuminate\Support\Str;
-use SeuVendor\BancoDoBrasil\Exceptions\BBApiException;
-use SeuVendor\BancoDoBrasil\Exceptions\BBValidationException;
-use SeuVendor\BancoDoBrasil\Utils\BoletoValidator;
-use SeuVendor\BancoDoBrasil\Utils\FormatHelper;
-use SeuVendor\BancoDoBrasil\Utils\LogHelper;
+use WandersonBarradas\BancoDoBrasil\Exceptions\BBApiException;
+use WandersonBarradas\BancoDoBrasil\Exceptions\BBValidationException;
+use WandersonBarradas\BancoDoBrasil\Utils\BoletoValidator;
+use WandersonBarradas\BancoDoBrasil\Utils\FormatHelper;
+use WandersonBarradas\BancoDoBrasil\Utils\LogHelper;
 
 class BoletoService
 {

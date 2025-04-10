@@ -1,6 +1,6 @@
 <?php
 
-namespace SeuVendor\BancoDoBrasil;
+namespace WandersonBarradas\BancoDoBrasil;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ConnectException;

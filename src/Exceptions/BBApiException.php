@@ -1,5 +1,5 @@
 <?php
 
-namespace SeuVendor\BancoDoBrasil\Exceptions;
+namespace WandersonBarradas\BancoDoBrasil\Exceptions;
 
 class BBApiException extends BBException {}
