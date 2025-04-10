@@ -3,7 +3,6 @@
 namespace WandersonBarradas\BancoDoBrasil\Utils;
 
 use Carbon\Carbon;
-use Illuminate\Support\Str;
 
 class FormatHelper
 {
@@ -37,13 +36,24 @@ class FormatHelper
      */
     public static function gerarNumeroTituloCliente(string $convenio): string
     {
-        // Gera um número baseado em timestamp e número aleatório
-        $timestamp = Carbon::now()->format('YmdHis');
-        $aleatorio = mt_rand(1000, 9999);
-        $hash = substr($timestamp . $aleatorio, 0, 10);
+        $hash = self::gerarNumeroAleatorio(10);
 
         // Formata o número conforme padrão do BB
         return "000" . $convenio . $hash;
+    }
+
+    public static function gerarNumeroAleatorio(int $digitos = 10): string
+    {
+        // Garante que o primeiro dígito não seja zero
+        $primeiro = mt_rand(1, 9);
+
+        // Gera os demais dígitos
+        $resto = '';
+        for ($i = 1; $i < $digitos; $i++) {
+            $resto .= mt_rand(0, 9);
+        }
+
+        return $primeiro . $resto;
     }
 
     /**

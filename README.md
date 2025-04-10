@@ -7,7 +7,7 @@ Este pacote fornece uma integração simplificada com a API de Cobrança do Banc
 Você pode instalar o pacote via composer:
 
 ```bash
-composer require seuvendor/banco-do-brasil
+composer require wandersonbarradas/banco-do-brasil
 ```
 
 ## Configuração
@@ -15,7 +15,7 @@ composer require seuvendor/banco-do-brasil
 Publique o arquivo de configuração:
 
 ```bash
-php artisan vendor:publish --provider="SeuVendor\BancoDoBrasil\BancoDoBrasilServiceProvider"
+php artisan vendor:publish --provider="WandersonBarradas\BancoDoBrasil\BancoDoBrasilServiceProvider"
 ```
 
 Adicione as seguintes variáveis ao seu .env:
@@ -23,7 +23,7 @@ Adicione as seguintes variáveis ao seu .env:
 ## Uso Básico
 
 ```php
-use SeuVendor\BancoDoBrasil\BancoDoBrasilAPI;
+use WandersonBarradas\BancoDoBrasil\BancoDoBrasilAPI;
 
 // Inicializar a API (ambiente sandbox por padrão)
 $bbApi = new BancoDoBrasilAPI();

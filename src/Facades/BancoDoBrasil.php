@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static array alterarBoleto(string $id, array $dados)
  * @method static array consultarPagamento(string $id)
  * 
- * @see \SeuVendor\BancoDoBrasil\Services\BoletoService
+ * @see \WandersonBarradas\BancoDoBrasil\Services\BoletoService
  */
 class BancoDoBrasil extends Facade
 {

@@ -59,4 +59,19 @@ return [
     'connect_timeout' => env('BB_API_CONNECT_TIMEOUT', 5),
     'max_retries' => env('BB_API_MAX_RETRIES', 3),
     'retry_delay' => env('BB_API_RETRY_DELAY', 500), // milissegundos
+
+    /**
+     * Configurações para geração de PDF do boleto
+     */
+    'boleto_pdf' => [
+        'logo_path' => null, // Caminho para o logo do beneficiário no boleto
+        'multa' => 0, // Percentual de multa
+        'juros' => 0, // Percentual de juros por dia
+        'juros_apos' => 0, // Dias após vencimento para cobrança de juros
+        'dias_protesto' => 0, // Dias para protesto
+        'instrucoes_padrao' => [
+            'Pagar até a data do vencimento',
+            'Após o vencimento, entrar em contato com o beneficiário'
+        ]
+    ],
 ];

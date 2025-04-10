@@ -209,11 +209,15 @@ class BoletoService
         if ($errorData) {
             if (isset($errorData['erros']) && is_array($errorData['erros'])) {
                 $errors = $errorData['erros'];
-                $message = $errors[0]['textoMensagem'] ?? $message;
+                if (isset($errors[0]['textoMensagem']) && $errors[0]['textoMensagem'] !== '') {
+                    $message = $errors[0]['textoMensagem'];
+                }
             } elseif (isset($errorData['errors']) && is_array($errorData['errors'])) {
                 $errors = $errorData['errors'];
-                $message = $errors[0]['message'] ?? $message;
-            } elseif (isset($errorData['message'])) {
+                if (isset($errors[0]['message']) && $errors[0]['message'] !== '') {
+                    $message = $errors[0]['message'];
+                }
+            } elseif (isset($errorData['message']) && $errorData['message'] !== '') {
                 $message = $errorData['message'];
             }
         }
@@ -259,7 +263,7 @@ class BoletoService
 
         // Gera um número único para o boleto
         $dadosPadrao['numeroTituloCliente'] = FormatHelper::gerarNumeroTituloCliente($this->config['convenio']);
-        $dadosPadrao['numeroTituloBeneficiario'] = $dados['numeroTituloBeneficiario'] ?? Str::random(10);
+        $dadosPadrao['numeroTituloBeneficiario'] = $dados['numeroTituloBeneficiario'] ?? Str::upper(Str::random(15));
 
         // Remove campos opcionais não informados
         $dadosCompletos = array_merge($dadosPadrao, $dados);
@@ -327,26 +331,6 @@ class BoletoService
     }
 
     /**
-     * Obtém o PDF de um boleto.
-     *
-     * @param string $id
-     * @return array
-     * @throws BBApiException
-     */
-    public function obterPdfBoleto(string $id): array
-    {
-        $queryParams = [
-            'numeroConvenio' => $this->config['convenio'],
-            'formato' => 'pdf'
-        ];
-
-        $resposta = $this->sendRequest('GET', "boletos/{$id}", $queryParams);
-
-        // A resposta já está formatada corretamente pelo método sendRequest
-        return $resposta;
-    }
-
-    /**
      * Baixa (cancela) um boleto.
      *
      * @param string $id
@@ -398,5 +382,127 @@ class BoletoService
         ];
 
         return $this->sendRequest('GET', "boletos/{$id}/pagamento", $queryParams);
+    }
+
+    /**
+     * Gera um PDF do boleto utilizando a biblioteca laravel-boleto.
+     * 
+     * Este método obtém os dados do boleto via API do Banco do Brasil
+     * e utiliza a biblioteca eduardokum/laravel-boleto para gerar
+     * um arquivo PDF com o layout completo do boleto.
+     *
+     * @param string $id ID do boleto no Banco do Brasil
+     * @param array $beneficiario Dados do beneficiário (cedente)
+     * @param array $pagador Dados do pagador (sacado)
+     * @param bool $mostrar Se true, exibe o boleto no navegador. Se false, força o download
+     * @param string|null $caminho Caminho onde o boleto será salvo. Se null, retorna o conteúdo binário
+     * @return array Dados do PDF do boleto
+     * @throws BBApiException|BBValidationException
+     */
+    public function gerarPdfBoleto(
+        string $id,
+        array $beneficiario,
+        array $pagador,
+        bool $mostrar = true,
+        string $caminho = null
+    ): array {
+        try {
+            // Passo 1: Obter dados do boleto na API do BB
+            $dadosBoleto = $this->obterBoleto($id);
+
+            if (!isset($dadosBoleto['valorOriginal']) || !isset($dadosBoleto['linhaDigitavel'])) {
+                throw new BBValidationException("Dados insuficientes para geração do boleto PDF");
+            }
+
+            // Passo 2: Configurar os dados do beneficiário e pagador
+            $beneficiarioPessoa = new \Eduardokum\LaravelBoleto\Pessoa([
+                'nome'      => $beneficiario['nome'] ?? 'Nome do Beneficiário',
+                'documento' => $beneficiario['documento'] ?? '',
+                'endereco'  => $beneficiario['endereco'] ?? '',
+                'cep'       => $beneficiario['cep'] ?? '',
+                'cidade'    => $beneficiario['cidade'] ?? '',
+                'uf'        => $beneficiario['uf'] ?? '',
+            ]);
+
+            $pagadorPessoa = new \Eduardokum\LaravelBoleto\Pessoa([
+                'nome'      => $pagador['nome'] ?? 'Nome do Pagador',
+                'documento' => $pagador['documento'] ?? '',
+                'endereco'  => $pagador['endereco'] ?? '',
+                'cep'       => $pagador['cep'] ?? '',
+                'cidade'    => $pagador['cidade'] ?? '',
+                'uf'        => $pagador['uf'] ?? '',
+            ]);
+
+            // Converte a data no formato DD.MM.YYYY para um objeto Carbon
+            $dataVencimento = Carbon::createFromFormat('d.m.Y', $dadosBoleto['dataVencimento']);
+
+            // Configura o boleto do Banco do Brasil
+            $boleto = new \Eduardokum\LaravelBoleto\Boleto\Banco\Bb([
+                'logo'                   => $this->config['boleto_pdf']['logo_path'] ?? null,
+                'dataVencimento'         => $dataVencimento,
+                'valor'                  => $dadosBoleto['valorOriginal'],
+                'numeroDocumento'        => $dadosBoleto['numeroTituloCliente'] ?? '',
+                'nossoNumero'            => $dadosBoleto['numeroTituloCliente'] ?? '',
+                'carteira'               => $dadosBoleto['numeroCarteira'] ?? $this->config['carteira'],
+                'convenio'               => $dadosBoleto['numeroConvenio'] ?? $this->config['convenio'],
+                'agencia'                => $dadosBoleto['agenciaBeneficiario'] ?? '',
+                'conta'                  => $dadosBoleto['contaBeneficiario'] ?? '',
+                'multa'                  => $this->config['boleto_pdf']['multa'] ?? 0,
+                'juros'                  => $this->config['boleto_pdf']['juros'] ?? 0,
+                'jurosApos'              => $this->config['boleto_pdf']['juros_apos'] ?? 0,
+                'diasProtesto'           => $this->config['boleto_pdf']['dias_protesto'] ?? 0,
+                'aceite'                 => $dadosBoleto['codigoAceite'] ?? 'N',
+                'especieDoc'             => $dadosBoleto['codigoTipoTitulo'] ?? 'DM',
+                'beneficiario'           => $beneficiarioPessoa,
+                'pagador'                => $pagadorPessoa,
+                'linhaDigitavel'         => $dadosBoleto['linhaDigitavel'] ?? '',
+                'codigoBarras'           => $dadosBoleto['codigoBarraNumerico'] ?? '',
+                'descricaoDemonstrativo' => [$dadosBoleto['mensagemBeneficiario'] ?? 'Boleto gerado via API do Banco do Brasil'],
+                'instrucoes'             => $this->config['boleto_pdf']['instrucoes_padrao'] ?? ['Pagar até a data do vencimento'],
+            ]);
+
+            // Passo 3: Gerar o PDF
+            if (isset($dadosBoleto['indicadorPix']) && $dadosBoleto['indicadorPix'] === 'S' && !empty($dadosBoleto['qrCode'])) {
+                // Adicionar QR Code PIX se disponível
+                $boleto->setPixQrCode($dadosBoleto['qrCode']);
+            }
+
+            // Cria o renderizador de PDF
+            $pdf = new \Eduardokum\LaravelBoleto\Boleto\Render\Pdf();
+            $pdf->addBoleto($boleto);
+
+            // Determina o que fazer com o PDF
+            if ($caminho) {
+                // Salva o PDF em um arquivo
+                $pdf->gerarBoleto($mostrar ? 'I' : 'D', $caminho);
+
+                return [
+                    'success' => true,
+                    'message' => 'PDF do boleto gerado com sucesso',
+                    'path' => $caminho
+                ];
+            } else {
+                // Retorna o conteúdo do PDF
+                $content = $pdf->gerarBoleto($mostrar ? 'I' : 'S');
+
+                return [
+                    'success' => true,
+                    'content_type' => 'application/pdf',
+                    'data' => $content,
+                    'is_binary' => true,
+                    'filename' => "boleto_bb_{$id}.pdf"
+                ];
+            }
+        } catch (\Exception $e) {
+            if ($e instanceof BBApiException || $e instanceof BBValidationException) {
+                throw $e;
+            }
+
+            throw new BBApiException(
+                "Erro ao gerar PDF do boleto: " . $e->getMessage(),
+                500,
+                $e
+            );
+        }
     }
 }
