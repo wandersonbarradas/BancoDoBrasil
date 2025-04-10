@@ -9,6 +9,12 @@
             "email": "wandersonbarradas07@gmail.com"
         }
     ],
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/eduardokum/laravel-mail-auto-embed.git"
+        }
+    ],
     "require": {
         "php": "^8.0",
         "ext-intl": "*",
