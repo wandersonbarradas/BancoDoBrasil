@@ -11,7 +11,7 @@ Este pacote fornece uma integração simplificada com a API de Cobrança do Banc
 
 Você pode instalar o pacote via composer:
 
-No seu arquivo composer.json adicione o seguinte conteúdo:
+No seu arquivo `composer.json` adicione o seguinte conteúdo:
 
 ```json
 "repositories": [
@@ -21,7 +21,7 @@ No seu arquivo composer.json adicione o seguinte conteúdo:
         }
     ],
 ```
-No terminal execulte:
+No terminal execute:
 
 ```bash
 composer require wandersonbarradas/banco-do-brasil:dev-master
