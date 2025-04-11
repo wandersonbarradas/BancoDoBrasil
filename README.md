@@ -21,6 +21,7 @@ No seu arquivo composer.json adicione o seguinte conteúdo:
         }
     ],
 ```
+No terminal execulte:
 
 ```bash
 composer require wandersonbarradas/banco-do-brasil:dev-master
