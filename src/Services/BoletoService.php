@@ -394,11 +394,85 @@ class BoletoService
      */
     public function consultarPagamento(string $id): array
     {
-        $queryParams = [
-            'numeroConvenio' => $this->config['convenio']
+        // Obter os dados completos do boleto usando o método já existente
+        $dadosBoleto = $this->obterBoleto($id);
+
+        // Verificar se o campo de estado existe na resposta
+        if (!isset($dadosBoleto['codigoEstadoTituloCobranca'])) {
+            throw new BBApiException('Não foi possível determinar o estado do boleto na resposta da API', 500);
+        }
+
+        // Mapeamento dos códigos de estado para descrições mais amigáveis
+        $estadosBoleto = [
+            1 => 'NORMAL',
+            2 => 'MOVIMENTO CARTORIO',
+            3 => 'EM CARTORIO',
+            4 => 'TITULO COM OCORRENCIA DE CARTORIO',
+            5 => 'PROTESTADO ELETRONICO',
+            6 => 'LIQUIDADO',
+            7 => 'BAIXADO',
+            8 => 'TITULO COM PENDENCIA DE CARTORIO',
+            9 => 'TITULO PROTESTADO MANUAL',
+            10 => 'TITULO BAIXADO/PAGO EM CARTORIO',
+            11 => 'TITULO LIQUIDADO/PROTESTADO',
+            12 => 'TITULO LIQUID/PGCRTO',
+            13 => 'TITULO PROTESTADO AGUARDANDO BAIXA',
+            14 => 'TITULO EM LIQUIDACAO',
+            15 => 'TITULO AGENDADO',
+            16 => 'TITULO CREDITADO',
+            17 => 'PAGO EM CHEQUE - AGUARD.LIQUIDACAO',
+            18 => 'PAGO PARCIALMENTE',
+            19 => 'PAGO PARCIALMENTE CREDITADO',
+            21 => 'TITULO AGENDADO COMPE',
+            80 => 'EM PROCESSAMENTO (ESTADO TRANSITÓRIO)'
         ];
 
-        return $this->sendRequest('GET', "boletos/{$id}/pagamento", $queryParams);
+        // Mapeamento dos códigos de tipo de liquidação
+        $tiposLiquidacao = [
+            1 => 'CAIXA',
+            2 => 'VIA COMPE',
+            3 => 'EM CARTORIO',
+            4 => 'PIX',
+            5 => 'TITULO EM LIQUIDACAO - ORIGEM AGE',
+            6 => 'TITULO EM LIQUIDACAO - PGT',
+            7 => 'BANCO POSTAL',
+            8 => 'TITULO LIQUIDADO VIA COMPE/STR'
+        ];
+
+        // Obter o código do estado do boleto
+        $codigoEstado = $dadosBoleto['codigoEstadoTituloCobranca'];
+
+        // Obter a descrição do estado se existir no mapeamento
+        $descricaoEstado = $estadosBoleto[$codigoEstado] ?? "ESTADO DESCONHECIDO (Código: {$codigoEstado})";
+
+        // Verificar se o boleto foi pago, excluindo estados de pagamento parcial (18 e 19)
+        $estadosPagos = [6, 10, 11, 12, 16, 17]; // removidos os estados 18 e 19 (pagamentos parciais)
+        $pago = in_array($codigoEstado, $estadosPagos);
+        $statusPagamento = $pago ? 'PAGO' : 'NAO_PAGO';
+
+        // Identificar pagamentos parciais (apenas para o campo de descrição)
+        if (in_array($codigoEstado, [18, 19])) {
+            $statusPagamento = 'NAO_PAGO'; // embora seja parcial, consideramos como não pago
+            $descricaoEstado .= ' (Pagamento parcial é considerado como não pago)';
+        }
+
+        // Informações sobre o tipo de liquidação (se disponível)
+        $codigoTipoLiquidacao = $dadosBoleto['codigoTipoLiquidacao'] ?? 0;
+        $tipoLiquidacao = $tiposLiquidacao[$codigoTipoLiquidacao] ?? 'NÃO LIQUIDADO';
+
+        // Retornar um array com as informações de pagamento
+        return [
+            'status' => $statusPagamento,
+            'pago' => $pago, // será false para pagamentos parciais
+            'codigo_estado' => $codigoEstado,
+            'descricao_estado' => $descricaoEstado,
+            'codigo_tipo_liquidacao' => $codigoTipoLiquidacao,
+            'tipo_liquidacao' => $tipoLiquidacao,
+            'data_pagamento' => $dadosBoleto['dataRecebimentoTitulo'] ?? null,
+            'valor_pago' => $dadosBoleto['valorPagoSacado'] ?? 0.00,
+            'valor_credito_cedente' => $dadosBoleto['valorCreditoCedente'] ?? 0.00,
+            'dados_completos' => $dadosBoleto
+        ];
     }
 
     /**
@@ -421,7 +495,7 @@ class BoletoService
         array $beneficiario,
         array $pagador,
         bool $mostrar = true,
-        string $caminho = null
+        string|null $caminho = null
     ): array {
         try {
             // Passo 1: Obter dados do boleto na API do BB
