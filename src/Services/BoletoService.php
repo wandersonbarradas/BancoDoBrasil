@@ -516,6 +516,7 @@ class BoletoService
         string $id,
         array $beneficiario,
         array $pagador,
+        string|null $qrCode = null,
         bool $mostrar = true,
         string|null $caminho = null
     ): array {
@@ -575,9 +576,9 @@ class BoletoService
             ]);
 
             // Passo 3: Gerar o PDF
-            if ($this->config['cobranca_pagamento_pix'] && !empty($dadosBoleto['qrCode'])) {
+            if ($this->config['cobranca_pagamento_pix'] && !empty($qrCode)) {
                 // Adicionar QR Code PIX se disponível
-                $boleto->setPixQrCode($dadosBoleto['qrCode']);
+                $boleto->setPixQrCode($qrCode);
             }
 
             // Cria o renderizador de PDF
