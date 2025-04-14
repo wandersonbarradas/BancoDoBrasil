@@ -205,21 +205,43 @@ class BoletoService
     {
         $errors = [];
         $message = "Erro na API do BB";
+        $codigosBB = [];
 
         if ($errorData) {
             if (isset($errorData['erros']) && is_array($errorData['erros'])) {
                 $errors = $errorData['erros'];
+
+                // Extrai códigos de erro
+                foreach ($errors as $error) {
+                    if (isset($error['codigo'])) {
+                        $codigosBB[] = $error['codigo'];
+                    }
+                }
+
                 if (isset($errors[0]['textoMensagem']) && $errors[0]['textoMensagem'] !== '') {
                     $message = $errors[0]['textoMensagem'];
                 }
             } elseif (isset($errorData['errors']) && is_array($errorData['errors'])) {
                 $errors = $errorData['errors'];
+
+                // Extrai códigos de erro
+                foreach ($errors as $error) {
+                    if (isset($error['codigo'])) {
+                        $codigosBB[] = $error['codigo'];
+                    }
+                }
+
                 if (isset($errors[0]['message']) && $errors[0]['message'] !== '') {
                     $message = $errors[0]['message'];
                 }
             } elseif (isset($errorData['message']) && $errorData['message'] !== '') {
                 $message = $errorData['message'];
             }
+        }
+
+        // Adiciona os códigos à mensagem de erro
+        if (!empty($codigosBB)) {
+            $message .= " [Códigos: " . implode(', ', $codigosBB) . "]";
         }
 
         return new BBApiException($message, $statusCode, $exception, $errors);
