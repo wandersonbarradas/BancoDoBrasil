@@ -507,6 +507,7 @@ class BoletoService
      * @param string $id ID do boleto no Banco do Brasil
      * @param array $beneficiario Dados do beneficiário (cedente)
      * @param array $pagador Dados do pagador (sacado)
+     * @param string|null $qrCode Código QR Code PIX (opcional)
      * @param bool $mostrar Se true, exibe o boleto no navegador. Se false, força o download
      * @param string|null $caminho Caminho onde o boleto será salvo. Se null, retorna o conteúdo binário
      * @return array Dados do PDF do boleto
