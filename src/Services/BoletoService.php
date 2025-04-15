@@ -551,36 +551,27 @@ class BoletoService
             // Converte a data no formato DD.MM.YYYY para um objeto Carbon
             $dataVencimento = Carbon::createFromFormat('d.m.Y', $dadosBoleto['dataVencimentoTituloCobranca']);
             $dataDocumento = Carbon::createFromFormat('d.m.Y', $dadosBoleto['dataEmissaoTituloCobranca']);
-            // Configura o boleto do Banco do Brasil
-            $boleto = new \Eduardokum\LaravelBoleto\Boleto\Banco\Bb([
-                'logo'                   => $this->config['boleto_pdf']['logo_path'] ?? null,
-                'agencia'                => $dadosBoleto['agenciaBeneficiario'] ?? '',
-                'conta'                  => $dadosBoleto['contaBeneficiario'] ?? '',
-                'carteira'               => $dadosBoleto['numeroCarteiraCobranca'] ?? $this->config['carteira'],
-                'variacaoCarteira'       => $dadosBoleto['numeroVariacaoCarteiraCobranca'] ?? $this->config['variacao_carteira'],
-                'convenio'               => $this->config['convenio'],
-                'dataVencimento'         => $dataVencimento,
-                'dataDocumento'          => $dataDocumento,
-                'valor'                  => $dadosBoleto['valorAtualTituloCobranca'],
-                'numeroDocumento'        => $id,
-                'numero'                 => substr($id, -10),
-                'multa'                  => $this->config['boleto_pdf']['multa'] ?? 0,
-                'juros'                  => $this->config['boleto_pdf']['juros'] ?? 0,
-                'jurosApos'              => $this->config['boleto_pdf']['juros_apos'] ?? 0,
-                'diasProtesto'           => $this->config['boleto_pdf']['dias_protesto'] ?? 0,
-                'aceite'                 => $dadosBoleto['codigoAceiteTituloCobranca'] ?? 'N',
-                'especieDoc'             => $dadosBoleto['codigoTipoTituloCobranca'] ?? '2',
-                'beneficiario'           => $beneficiarioPessoa,
-                'pagador'                => $pagadorPessoa,
-                'descricaoDemonstrativo' => [''],
-                'instrucoes'             => $this->config['boleto_pdf']['instrucoes_padrao'] ?? ['Pagar até a data do vencimento'],
-            ]);
 
-            // Passo 3: Gerar o PDF
+            // Configura o boleto do Banco do Brasil
+            $boleto = new \Eduardokum\LaravelBoleto\Boleto\Banco\Bb();
+
             if ($this->config['cobranca_pagamento_pix'] && !empty($qrCode)) {
                 // Adicionar QR Code PIX se disponível
                 $boleto->setPixQrCode($qrCode);
             }
+            $boleto->setConvenio($this->config['convenio'])
+                ->setLogo($this->config['boleto_pdf']['logo_path'])
+                ->setAgencia($this->config['agencia'])
+                ->setConta($this->config['conta'])
+                ->setCarteira($this->config['carteira'])
+                ->setVariacaoCarteira($this->config['variacao_carteira'])
+                ->setDataDocumento(Carbon::parse($dataDocumento))
+                ->setDataVencimento(Carbon::parse($dataVencimento))
+                ->setValor($dadosBoleto['valorAtualTituloCobranca'])
+                ->setNumero(substr($id, -10))
+                ->setNumeroDocumento($id)
+                ->setPagador($pagadorPessoa)
+                ->setBeneficiario($beneficiarioPessoa);
 
             // Cria o renderizador de PDF
             $pdf = new \Eduardokum\LaravelBoleto\Boleto\Render\Pdf();
