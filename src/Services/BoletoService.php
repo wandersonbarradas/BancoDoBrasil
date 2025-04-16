@@ -568,6 +568,7 @@ class BoletoService
                 ->setDataDocumento(Carbon::parse($dataDocumento))
                 ->setDataVencimento(Carbon::parse($dataVencimento))
                 ->setValor($dadosBoleto['valorAtualTituloCobranca'])
+                ->setAceite($dadosBoleto['codigoAceiteTituloCobranca'])
                 ->setNumero(substr($id, -10))
                 ->setNumeroDocumento($id)
                 ->setPagador($pagadorPessoa)
