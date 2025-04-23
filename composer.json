@@ -1,6 +1,7 @@
 {
     "name": "wandersonbarradas/banco-do-brasil",
     "description": "Integração com a API de Cobrança do Banco do Brasil",
+    "version": "1.0.0-dev",
     "type": "library",
     "license": "MIT",
     "authors": [
